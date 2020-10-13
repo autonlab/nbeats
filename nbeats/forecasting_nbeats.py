@@ -392,11 +392,9 @@ class ForecastingNBEATSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs,
             self._constant = 1 - self._data['y'].min()
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> CallResult[None]:
-        X_train = self._data[['unique_id', 'ds']]
-        X_train['x'] = '1'
         y_train = self._data[['unique_id', 'ds', 'y']]
         y_train['y'] += self._constant
-        self._nbeats.fit(X_train, y_train, verbose=False)
+        self._nbeats.fit(y_train, verbose=False)
         self._is_fitted = True
 
         return base.CallResult(None)
