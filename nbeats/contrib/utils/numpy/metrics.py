@@ -8,7 +8,7 @@ import multiprocessing as mp
 from math import sqrt
 from functools import partial
 #from dask import delayed, compute
-from src.utils.pytorch.losses import divide_no_nan
+from nbeats.contrib.utils.pytorch.losses import divide_no_nan
 
 AVAILABLE_METRICS = ['mse', 'rmse', 'mape', 'smape', 'mase', 'rmsse',
                      'mini_owa', 'pinball_loss']

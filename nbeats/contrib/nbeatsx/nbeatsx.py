@@ -6,9 +6,9 @@ import pandas as pd
 import torch as t
 from torch import optim
 
-from src.nbeatsx.nbeatsx_model import NBeats, NBeatsBlock, IdentityBasis, TrendBasis, SeasonalityBasis, ExogenousBasis
-from src.utils.pytorch.sampler import TimeseriesDataset
-from src.utils.pytorch.losses import MAPELoss, MASELoss, SMAPELoss, MSEloss
+from nbeats.contrib.nbeatsx.nbeatsx_model import NBeats, NBeatsBlock, IdentityBasis, TrendBasis, SeasonalityBasis, ExogenousBasis
+from nbeats.contrib.utils.pytorch.sampler import TimeseriesDataset
+from nbeats.contrib.utils.pytorch.losses import MAPELoss, MASELoss, SMAPELoss, MSEloss
 
 class Nbeats(object):
     """
