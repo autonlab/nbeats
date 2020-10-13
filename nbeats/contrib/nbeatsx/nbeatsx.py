@@ -186,7 +186,7 @@ class Nbeats(object):
                                     ts_data=ts_data, static_data=static_data, meta_data=meta_data,
                                     window_sampling_limit=self.window_sampling_limit,
                                     offset=offset, input_size=self.input_size, output_size=self.output_size,
-                                    batch_size=self.batch_size)
+                                    batch_size=self.batch_size, random_seed=self.random_seed)
 
         n_x_t, n_s_t = 0, 0
         if X_t_df is not None:
@@ -210,7 +210,7 @@ class Nbeats(object):
     def fit(self, y_df, X_s_df=None, X_t_df=None, offset=0, n_iterations=None, verbose=True, display_steps=100):
         # Random Seeds (model initialization)
         t.manual_seed(self.random_seed)
-        np.random.seed(self.random_seed)
+        # np.random.seed(self.random_seed)   # Use a random generator instead e.g. random_generator = np.random.default_rng(seed=self.random_seed)
 
         # Overwrite n_iterations and train datasets
         if n_iterations is None:
