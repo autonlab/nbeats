@@ -205,7 +205,8 @@ class ForecastingNBEATSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs,
                               batch_size=hyperparams['batch_size'],
                               loss=hyperparams['loss'],
                               seasonality=hyperparams['seasonality'],
-                              random_seed=random_seed,
+                              # random_seed=random_seed,  # FIXME pipelines are tuned on NBeats default seed
+                              random_seed=1,
                               device=self._device)
         self._time_column = None
         self._integer_time = False
