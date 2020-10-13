@@ -136,10 +136,9 @@ class ForecastingNBEATSHyperparams(hyperparams.Hyperparams):
         description=""
     )
     device = hyperparams.Hyperparameter[str](
-        default="cpu",
+        default="cuda",
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="Specify the device, such as cpu, cuda, cuda:0. We recommend using CPU. It fallbacks to "
-                    "CPU if GPU is not available",
+        description="Specify the device, such as cpu, cuda, cuda:0. CPU if GPU is not available",
     )
 
 
