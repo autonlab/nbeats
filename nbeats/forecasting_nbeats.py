@@ -366,7 +366,7 @@ class ForecastingNBEATSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs,
 
         if len(grouping_keys):
             # Infer frequency
-            freq = self._nbeats.mc.frequency
+            freq = self._nbeats.frequency
             if not freq:
                 freq = pd.infer_freq(concat.head()['ds'])
                 if freq is None and len(concat['unique_id']) > 0:
