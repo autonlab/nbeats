@@ -173,14 +173,14 @@ class Nbeats(object):
 
         if self.frequency is None:
             self.frequency = pd.infer_freq(y_df.head()['ds'])
-            print("Infered frequency: {}".format(self.frequency))
+            # print("Infered frequency: {}".format(self.frequency))
 
         #X_t_df, y_df = self.fill_series(X_t_df, y_df) #TODO: revisar que se necesite
 
-        print('Processing data ...')
+        # print('Processing data ...')
         ts_data, static_data, meta_data = self.transform_data(y_df=y_df, X_s_df=X_s_df, X_t_df=X_t_df)
 
-        print('Creating dataloader ...')
+        # print('Creating dataloader ...')
         self._is_data_parsed = True
         ts_data = TimeseriesDataset(model='nbeats',
                                     ts_data=ts_data, static_data=static_data, meta_data=meta_data,
@@ -226,7 +226,8 @@ class Nbeats(object):
         # Update offset (only for online train)
         self.ts_dataset.update_offset(offset)
 
-        print('='*30+' Training NBEATS '+'='*30)
+        if verbose:
+            print('='*30+' Training NBEATS '+'='*30)
 
         dataloader = iter(self.ts_dataset)
 
@@ -284,7 +285,8 @@ class Nbeats(object):
         # Last outsample prediction
         if offset > 0:
             self.loss_dict = self.evaluate_performance(offset, self._eval_criterions)
-            print("Outsample loss: {}".format(self.loss_dict))
+            if verbose:
+                print("Outsample loss: {}".format(self.loss_dict))
 
     def predict(self, X_test=None, offset=0, eval_mode=False):
         self.ts_dataset.update_offset(offset)
