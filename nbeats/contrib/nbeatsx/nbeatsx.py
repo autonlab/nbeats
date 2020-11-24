@@ -239,8 +239,8 @@ class Nbeats(object):
     def fit(self, y_df, X_s_df=None, X_t_df=None, offset=0, n_iterations=None, verbose=True, display_steps=100):
         # Random Seeds (model initialization)
         t.manual_seed(self.random_seed)
-        np.random.seed(self.random_seed)
-        random.seed(self.random_seed)
+        #np.random.seed(self.random_seed)
+        #random.seed(self.random_seed)
 
         # Parse data
         self.unique_ids = y_df['unique_id'].unique()
