@@ -2,13 +2,15 @@ import os
 import time
 import numpy as np
 import pandas as pd
+import random
+from collections import defaultdict
 
 import torch as t
 from torch import optim
 
-from nbeats.contrib.nbeatsx.nbeatsx_model import NBeats, NBeatsBlock, IdentityBasis, TrendBasis, SeasonalityBasis, ExogenousBasis
-from nbeats.contrib.utils.pytorch.sampler import TimeseriesDataset
-from nbeats.contrib.utils.pytorch.losses import MAPELoss, MASELoss, SMAPELoss, MSEloss
+from src.nbeatsx.nbeatsx_model import NBeats, NBeatsBlock, IdentityBasis, TrendBasis, SeasonalityBasis
+from src.utils.pytorch.sampler import TimeseriesDataset
+from src.utils.pytorch.losses import MAPELoss, MASELoss, SMAPELoss, MSELoss, MAELoss
 
 class Nbeats(object):
     """
@@ -29,8 +31,11 @@ class Nbeats(object):
                  n_hidden=[256, 2048],
                  n_harmonics=1,
                  n_polynomials=2,
+                 batch_normalization=False,
+                 dropout_prob=0,
+                 weight_decay=0,
                  learning_rate=0.001,
-                 lr_decay=1.0,
+                 lr_decay=0.5,
                  n_lr_decay_steps=3,
                  batch_size=1024,
                  n_iterations=300,
@@ -51,7 +56,9 @@ class Nbeats(object):
         self.n_hidden = n_hidden
         self.n_harmonics = n_harmonics
         self.n_polynomials = n_polynomials
-        #self.n_epochs = n_epochs
+        self.batch_normalization = batch_normalization
+        self.dropout_prob = dropout_prob
+        self.weight_decay = weight_decay
         self.learning_rate = learning_rate
         self.lr_decay = lr_decay
         self.n_lr_decay_steps = n_lr_decay_steps
@@ -74,8 +81,17 @@ class Nbeats(object):
         for i in range(len(self.stack_types)):
             #print(f'| --  Stack {self.stack_types[i]} (#{i})')
             for block_id in range(self.n_blocks[i]):
+
+                 # Batch norm only on first block
+                if (len(block_list)==0) and (self.batch_normalization):
+                    batch_normalization_block = True
+                else:
+                    batch_normalization_block = False
+                
+                # Shared weights
                 if self.shared_weights and block_id>0:
                     nbeats_block = block_list[-1]
+
                 else:
                     if self.stack_types[i] == 'seasonality': #NBeats.SEASONALITY_BLOCK
                         nbeats_block = NBeatsBlock(n_inputs=self.input_size,
@@ -86,7 +102,9 @@ class Nbeats(object):
                                                                                 backcast_size=self.input_size,
                                                                                 forecast_size=self.output_size),
                                                 n_layers=self.n_layers[i],
-                                                n_hidden=self.n_hidden[i])
+                                                n_hidden=self.n_hidden[i],
+                                                batch_normalization=batch_normalization_block,
+                                                dropout_prob=self.dropout_prob)
                     elif self.stack_types[i] == 'trend': # NBeats.TREND_BLOCK
                         nbeats_block = NBeatsBlock(n_inputs=self.input_size,
                                                 #    n_static=self.n_static,
@@ -95,7 +113,9 @@ class Nbeats(object):
                                                                             backcast_size=self.input_size,
                                                                             forecast_size=self.output_size),
                                                 n_layers=self.n_layers[i],
-                                                n_hidden=self.n_hidden[i])
+                                                n_hidden=self.n_hidden[i],
+                                                batch_normalization=batch_normalization_block,
+                                                dropout_prob=self.dropout_prob)
                     elif self.stack_types[i] == 'identity': #NBeats.GENERIC_BLOCK
                         nbeats_block = NBeatsBlock(n_inputs=self.input_size,
                                                 #    n_static=self.n_static,
@@ -103,14 +123,9 @@ class Nbeats(object):
                                                 basis=IdentityBasis(backcast_size=self.input_size,
                                                                     forecast_size=self.output_size),
                                                 n_layers=self.n_layers[i],
-                                                n_hidden=self.n_hidden[i])
-                    elif self.stack_types[i] == 'exogenous': #NBeats.GENERIC_BLOCK
-                        nbeats_block = NBeatsBlock(n_inputs=self.input_size,
-                                                #    n_static=self.n_static,
-                                                theta_dim=2*self.n_x_t,
-                                                basis=ExogenousBasis(),
-                                                n_layers=self.n_layers[i],
-                                                n_hidden=self.n_hidden[i])
+                                                n_hidden=self.n_hidden[i],
+                                                batch_normalization=batch_normalization_block,
+                                                dropout_prob=self.dropout_prob)
                 #print(f'     | -- {nbeats_block}')
                 block_list.append(nbeats_block)
         return block_list
@@ -124,7 +139,9 @@ class Nbeats(object):
             elif loss_name == 'SMAPE':
                 return SMAPELoss(y=target, y_hat=forecast, mask=mask)
             elif loss_name == 'MSE':
-                return MSEloss(y=target, y_hat=forecast, mask=mask)       
+                return MSELoss(y=target, y_hat=forecast, mask=mask)
+            elif loss_name == 'MAE':
+                return MAELoss(y=target, y_hat=forecast, mask=mask)
             else:
                 raise Exception(f'Unknown loss function: {loss_name}')
         return loss
@@ -140,6 +157,11 @@ class Nbeats(object):
             X_t_vars = [col for col in X_t_df.columns if col not in ['unique_id','ds']]
         else:
             X_t_vars = []
+
+        if X_s_df is not None:
+            X_s_vars = [col for col in X_s_df.columns if col not in ['unique_id']]
+        else:
+            X_s_vars = []
 
         ts_data = []
         static_data = []
@@ -157,6 +179,13 @@ class Nbeats(object):
                 serie =  X_t_df[top_row:bottom_row][X_t_var].values
                 ts_data_i[X_t_var] = serie
             ts_data.append(ts_data_i)
+
+            # Static data
+            s_data_i = defaultdict(list)
+            for X_s_var in X_s_vars:
+                s_data_i[X_s_var] = X_s_df.loc[X_s_df['unique_id']==u_id, X_s_var].values
+            static_data.append(s_data_i)
+
             # Metadata
             meta_data_i = {'unique_id': u_id,
                            'last_ds': last_ds_i}
@@ -173,20 +202,20 @@ class Nbeats(object):
 
         if self.frequency is None:
             self.frequency = pd.infer_freq(y_df.head()['ds'])
-            # print("Infered frequency: {}".format(self.frequency))
+            print("Infered frequency: {}".format(self.frequency))
 
         #X_t_df, y_df = self.fill_series(X_t_df, y_df) #TODO: revisar que se necesite
 
-        # print('Processing data ...')
+        print('Processing data ...')
         ts_data, static_data, meta_data = self.transform_data(y_df=y_df, X_s_df=X_s_df, X_t_df=X_t_df)
 
-        # print('Creating dataloader ...')
-        self._is_data_parsed = True
+        print('Creating dataloader ...')
         ts_data = TimeseriesDataset(model='nbeats',
                                     ts_data=ts_data, static_data=static_data, meta_data=meta_data,
                                     window_sampling_limit=self.window_sampling_limit,
                                     offset=offset, input_size=self.input_size, output_size=self.output_size,
-                                    batch_size=self.batch_size, random_seed=self.random_seed)
+                                    idx_to_sample_freq=1,
+                                    batch_size=self.batch_size)
 
         n_x_t, n_s_t = 0, 0
         if X_t_df is not None:
@@ -210,24 +239,25 @@ class Nbeats(object):
     def fit(self, y_df, X_s_df=None, X_t_df=None, offset=0, n_iterations=None, verbose=True, display_steps=100):
         # Random Seeds (model initialization)
         t.manual_seed(self.random_seed)
-        # np.random.seed(self.random_seed)   # Use a random generator instead e.g. random_generator = np.random.default_rng(seed=self.random_seed)
+        np.random.seed(self.random_seed)
+        random.seed(self.random_seed)
+
+        # Parse data
+        self.unique_ids = y_df['unique_id'].unique()
+        self.ts_dataset, self.n_x_t, self.n_x_s = self.parse_data(y_df=y_df, X_s_df=X_s_df, X_t_df=X_t_df, offset=offset)
+
+        # Instantiate model
+        block_list = self.create_stack()
+        self.model = NBeats(t.nn.ModuleList(block_list)).to(self.device)
 
         # Overwrite n_iterations and train datasets
         if n_iterations is None:
             n_iterations = self.n_iterations
         
-        if not self._is_data_parsed:
-            self.unique_ids = y_df['unique_id'].unique()
-            self.ts_dataset, self.n_x_t, self.n_x_s = self.parse_data(y_df=y_df, X_s_df=X_s_df, X_t_df=X_t_df, offset=offset)
-            # Instantiate model
-            block_list = self.create_stack()
-            self.model = NBeats(t.nn.ModuleList(block_list)).to(self.device)
-        
         # Update offset (only for online train)
         self.ts_dataset.update_offset(offset)
 
-        if verbose:
-            print('='*30+' Training NBEATS '+'='*30)
+        print('='*30+' Training NBEATS '+'='*30)
 
         dataloader = iter(self.ts_dataset)
 
@@ -235,7 +265,7 @@ class Nbeats(object):
         if lr_decay_steps == 0:
             lr_decay_steps = 1
 
-        optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=lr_decay_steps, gamma=self.lr_decay)
         training_loss_fn = self.__loss_fn(self.loss)
         
@@ -285,8 +315,7 @@ class Nbeats(object):
         # Last outsample prediction
         if offset > 0:
             self.loss_dict = self.evaluate_performance(offset, self._eval_criterions)
-            if verbose:
-                print("Outsample loss: {}".format(self.loss_dict))
+            print("Outsample loss: {}".format(self.loss_dict))
 
     def predict(self, X_test=None, offset=0, eval_mode=False):
         self.ts_dataset.update_offset(offset)

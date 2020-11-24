@@ -8,16 +8,27 @@ class NBeatsBlock(nn.Module):
     N-BEATS block which takes a basis function as an argument.
     """
     def __init__(self, n_inputs: int, theta_dim: int, basis: nn.Module, # n_static:int
-                 n_layers: int, n_hidden: int):
+                 n_layers: int, n_hidden: int, batch_normalization: bool, dropout_prob: float):
         """
         """
         super().__init__()
+        self.batch_normalization = batch_normalization
+        self.dropout_prob = dropout_prob
+
         input_layer = [nn.Linear(in_features=n_inputs, out_features=n_hidden), nn.ReLU()]
 
         hidden_layers = []
         for _ in range(n_layers-1):
             hidden_layers.append(nn.Linear(in_features=n_hidden, out_features=n_hidden))
             hidden_layers.append(nn.ReLU())
+
+            if self.batch_normalization:
+                hidden_layers.append(nn.BatchNorm1d(n_hidden))
+
+            if self.dropout_prob>0:
+                hidden_layers.append(nn.Dropout(p=self.dropout_prob))
+
+
         output_layer = [nn.Linear(in_features=n_hidden, out_features=theta_dim)]
         layers = input_layer + hidden_layers + output_layer
 
@@ -125,17 +136,4 @@ class SeasonalityBasis(nn.Module):
         cut_point = self.forecast_basis.shape[0]
         backcast = t.einsum('bp,pt->bt', theta[:, cut_point:], self.backcast_basis)
         forecast = t.einsum('bp,pt->bt', theta[:, :cut_point], self.forecast_basis)
-        return backcast, forecast
-
-class ExogenousBasis(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, theta: t.Tensor, insample_x_t: t.Tensor, outsample_x_t: t.Tensor) -> Tuple[t.Tensor, t.Tensor]:
-        backcast_basis = insample_x_t
-        forecast_basis = outsample_x_t
-
-        cut_point = forecast_basis.shape[1]
-        backcast = t.einsum('bp,bpt->bt', theta[:, cut_point:], backcast_basis)
-        forecast = t.einsum('bp,bpt->bt', theta[:, :cut_point], forecast_basis)
         return backcast, forecast
