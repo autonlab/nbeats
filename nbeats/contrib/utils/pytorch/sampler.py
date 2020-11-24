@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import random
 import torch as t
 from torch.utils.data import Dataset, DataLoader
 from collections import defaultdict
@@ -14,8 +15,8 @@ class TimeseriesDataset(Dataset):
                  window_sampling_limit: int, 
                  input_size: int,
                  output_size: int,
-                 batch_size: int,
-                 random_seed: int = 0):
+                 idx_to_sample_freq:int,
+                 batch_size: int):
         """
         """
         self.model = model
@@ -25,16 +26,17 @@ class TimeseriesDataset(Dataset):
         self.output_size = output_size
         self.max_len = max([len(ts['y']) for ts in ts_data])
         self.n_channels = len(ts_data[0].values())
-        self.time_series, self.len_series = self.create_tensor(ts_data)
+        self.time_series, self.static_data, self.len_series = self.create_tensor(ts_data, static_data)
         self.meta_data = meta_data
         self.batch_size = batch_size
+        self.idx_to_sample_freq = idx_to_sample_freq
         self.update_offset(offset)
         self._is_train = True
-        self.random_generator = np.random.default_rng(seed=random_seed)
+        #random.seed(1)
 
     def update_offset(self, offset):
         self.offset = offset
-
+       
     def train(self):
         self._is_train = True
     
@@ -45,16 +47,20 @@ class TimeseriesDataset(Dataset):
         var_values = [x[var] for x in self.meta_data]
         return var_values
 
-    def create_tensor(self, ts_data):
+    def create_tensor(self, ts_data, static_data):
         ts_tensor = np.zeros((self.n_series, self.n_channels, self.max_len))
+        static_tensor = np.zeros((self.n_series, len(static_data[0])))
+
         len_series = []
         for idx in range(self.n_series):
             ts_idx = np.array(list(ts_data[idx].values()))
             # print(ts_idx)
             # print(ts_idx.shape)
             ts_tensor[idx, :, -ts_idx.shape[1]:] = ts_idx
+            static_tensor[idx, :] = list(static_data[idx].values())
             len_series.append(ts_idx.shape[1])
-        return ts_tensor, np.array(len_series)
+
+        return ts_tensor, static_tensor, np.array(len_series)
     
     def __len__(self):
         return len(self.len_series)
@@ -62,7 +68,7 @@ class TimeseriesDataset(Dataset):
     def __iter__(self):
         while True:
             if self._is_train:
-                sampled_ts_indices = self.random_generator.integers(self.n_series, size=self.batch_size)
+                sampled_ts_indices = np.random.randint(self.n_series, size=self.batch_size)
             else:
                 sampled_ts_indices = range(self.n_series)
 
@@ -101,11 +107,13 @@ class TimeseriesDataset(Dataset):
         len_ts = self.len_series[index]
         # Rolling window (like replay buffer)
         init_ts = max(self.max_len-len_ts+1, self.max_len-self.offset-self.window_sampling_limit)
+        idx_to_sample = list(range(init_ts, self.max_len-self.offset, self.idx_to_sample_freq))
 
         assert self.max_len-self.offset > init_ts, f'Offset too big for serie {index}'
         if self._is_train:
-            cut_point = self.random_generator.integers(low=init_ts,
-                                                       high=self.max_len-self.offset, size=1)[0]
+            #  cut_point = np.random.randint(low=init_ts,
+            #                                high=self.max_len-self.offset, size=1)[0]
+            cut_point = random.sample(idx_to_sample, 1)[0]
         else:
             cut_point = max(self.max_len-self.offset, self.input_size)
         
@@ -114,7 +122,11 @@ class TimeseriesDataset(Dataset):
         insample[:, -insample_window.shape[1]:] = insample_window
         insample_mask[-insample_mask_start:] = 1.0
 
-        outsample_window = ts[:, cut_point:min(self.max_len, cut_point + self.output_size)]
+        if self._is_train:
+            outsample_window = ts[:, cut_point:min(self.max_len - self.offset, cut_point + self.output_size)]
+        else:
+            outsample_window = ts[:, cut_point:min(self.max_len, cut_point + self.output_size)]
+
         outsample[:, :outsample_window.shape[1]] = outsample_window
         outsample_mask[:outsample_window.shape[1]] = 1.0
 
@@ -124,7 +136,10 @@ class TimeseriesDataset(Dataset):
         outsample_y = outsample[0, :]
         outsample_x_t = outsample[1:, :]
 
+        static_data = self.static_data[index, :]
+
         sample = {'insample_y':insample_y, 'insample_x_t':insample_x_t, 'insample_mask':insample_mask,
-                  'outsample_y':outsample_y, 'outsample_x_t':outsample_x_t, 'outsample_mask':outsample_mask}
+                  'outsample_y':outsample_y, 'outsample_x_t':outsample_x_t, 'outsample_mask':outsample_mask,
+                  'static_data':static_data}
 
         return sample

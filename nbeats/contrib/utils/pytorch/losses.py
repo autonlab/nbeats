@@ -42,7 +42,7 @@ def MAPELoss(y, y_hat, mask=None):
     mape:
     Mean absolute percentage error.
     """
-    mask = divide_no_nan(mask, y)
+    mask = divide_no_nan(mask, t.abs(y))
     mape = t.abs(y - y_hat) * mask
     mape = t.mean(mape)
     return mape
@@ -59,7 +59,7 @@ def MAPELoss(y, y_hat, mask=None):
 #     weights = divide_no_nan(mask, target)
 #     return t.mean(t.abs((forecast - target) * weights))
 
-def MSEloss(y, y_hat, mask=None):
+def MSELoss(y, y_hat, mask=None):
     """MSE Loss
 
     Calculates Mean Squared Error between
@@ -88,7 +88,6 @@ def MSEloss(y, y_hat, mask=None):
     mse = mask * mse
     mse = t.mean(mse)
     return mse
-
 
 def SMAPELoss(y, y_hat, mask=None):
     """SMAPE2 Loss
@@ -169,6 +168,34 @@ def MASELoss(y, y_hat, y_insample, seasonality, mask=None) :
     mase = t.mean(mase)
     return mase
 
+def MAELoss(y, y_hat, mask=None):
+    """MAE Loss
+
+    Calculates Mean Absolute Error between
+    y and y_hat. MAE measures the relative prediction
+    accuracy of a forecasting method by calculating the
+    deviation of the prediction and the true
+    value at a given time and averages these devations
+    over the length of the series.
+
+    Parameters
+    ----------
+    y: tensor (batch_size, output_size)
+        actual values in torch tensor.
+    y_hat: tensor (batch_size, output_size)
+        predicted values in torch tensor.
+    mask: tensor (batch_size, output_size)
+        specifies date stamps per serie
+        to consider in loss
+
+    Returns
+    -------
+    mae:
+    Mean absolute error.
+    """
+    mae = t.abs(y - y_hat) * mask
+    mae = t.mean(mae)
+    return mae
 
 def PinballLoss(y, y_hat, mask=None):
     """Pinball Loss
