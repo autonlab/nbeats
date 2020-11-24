@@ -16,7 +16,8 @@ class TimeseriesDataset(Dataset):
                  input_size: int,
                  output_size: int,
                  idx_to_sample_freq:int,
-                 batch_size: int):
+                 batch_size: int,
+                 random_seed: int = 0):
         """
         """
         self.model = model
@@ -32,7 +33,7 @@ class TimeseriesDataset(Dataset):
         self.idx_to_sample_freq = idx_to_sample_freq
         self.update_offset(offset)
         self._is_train = True
-        #random.seed(1)
+        self.random_generator = np.random.default_rng(seed=random_seed)
 
     def update_offset(self, offset):
         self.offset = offset
@@ -68,7 +69,7 @@ class TimeseriesDataset(Dataset):
     def __iter__(self):
         while True:
             if self._is_train:
-                sampled_ts_indices = np.random.randint(self.n_series, size=self.batch_size)
+                sampled_ts_indices = self.random_generator.integers(self.n_series, size=self.batch_size)
             else:
                 sampled_ts_indices = range(self.n_series)
 
@@ -113,7 +114,7 @@ class TimeseriesDataset(Dataset):
         if self._is_train:
             #  cut_point = np.random.randint(low=init_ts,
             #                                high=self.max_len-self.offset, size=1)[0]
-            cut_point = random.sample(idx_to_sample, 1)[0]
+            cut_point = self.random_generator.integers(idx_to_sample, size=1)[0]
         else:
             cut_point = max(self.max_len-self.offset, self.input_size)
         
