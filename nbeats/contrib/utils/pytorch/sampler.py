@@ -114,7 +114,7 @@ class TimeseriesDataset(Dataset):
         if self._is_train:
             #  cut_point = np.random.randint(low=init_ts,
             #                                high=self.max_len-self.offset, size=1)[0]
-            cut_point = self.random_generator.integers(idx_to_sample, size=1)[0]
+            cut_point = self.random_generator.choice(idx_to_sample, size=1)[0]
         else:
             cut_point = max(self.max_len-self.offset, self.input_size)
         
